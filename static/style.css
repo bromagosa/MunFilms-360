@@ -67,7 +67,7 @@ span.label {
     display: inline-block;
 }
 
-div.config input {
+div.config input.input {
     width: 50px;
     margin-right: 5px;
 }

@@ -8,7 +8,8 @@ import time
 
 ppr = 8192
 turns = 1
-rpms = 10
+rpm = 30
+home = 0
 
 # MOTOR INITIALIZATION
 
@@ -23,17 +24,34 @@ while odrv0.axis0.current_state != AXIS_STATE_IDLE:
 print('ODrive calibrated. Setting state to Close Loop Control');
 odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
 
+odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
+
 # MOTOR CONTROL
 
 def set_position(position):
     odrv0.axis0.controller.config.control_mode = CTRL_MODE_POSITION_CONTROL
     odrv0.axis0.controller.pos_setpoint = position    
 
+def set_rpm(rpm):
+    odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
+
 def current_position():
     return odrv0.axis0.encoder.pos_estimate
 
 def closest_home():
-    return (current_position() // ppr) * ppr
+    return ((current_position() // ppr) * ppr) + home
+
+def go_home():
+    closest = closest_home()
+    set_rpm(25)
+    set_position(closest)
+    while (abs(current_position() - closest) > 10):
+        time.sleep(0.1)
+    set_rpm(rpm)
+    print('---')
+    print(str(current_position()))
+    print(str(home))
+    print('---')
 
 # HTML GENERATION
 
@@ -124,7 +142,8 @@ def index():
             h1('MunFilms 360') +
             div(
                 a('home', img('', src = 'static/home.png')) +
-                a('turn', img('', src = 'static/turn.png')),
+                a('turn', img('', src = 'static/turn.png')) +
+                a('stop', img('', src = 'static/stop.png')),
                 klass = 'controls'
             ) +
             h3('Configuració') +
@@ -132,16 +151,16 @@ def index():
                 form(
                     'setspeed',
                     span('Velocitat (RPM):', klass = 'label') +
-                        input('', name = 'speed') + 
-                        span('(' + str(rpms) + ')', klass = 'value') +
+                        input('', name = 'speed', klass = 'input') + 
+                        span('(' + str(rpm) + ')', klass = 'value') +
                         button('OK')) +
                 form(
                     'setturns',
                     span('Voltes:', klass = 'label') +
-                        input('', name = 'turns') +
+                        input('', name = 'turns', klass = 'input') +
                         span('(' + str(turns) + ')', klass = 'value') +
                         button('OK')) +
-                p('', klass = 'position') + pos_updater_script(),
+                form('sethome', button('Fixar posició inicial')),
                 klass = 'config') +
             img('', src = 'static/gif-web-alpha2.gif', klass = 'logo'),
             klass = 'wrapper'
@@ -150,7 +169,7 @@ def index():
 
 @route('/home')
 def gohome():
-    set_position(closest_home())
+    go_home()
     redirect('/')
 
 @route('/turn')
@@ -158,15 +177,30 @@ def turn():
     set_position(current_position() + (ppr * turns))
     redirect('/')
 
+@route('/stop')
+def stop():
+    odrv0.axis0.requested_state = AXIS_STATE_IDLE
+    time.sleep(0.25)
+    odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+    redirect('/')
+
+@post('/setspeed')
+def setspeed():
+    global rpm
+    rpm = min(float(request.forms.get('speed') or 0), 100)
+    set_rpm(rpm)
+    redirect('/')
+
 @post('/setturns')
 def setturns():
     global turns
-    turns = float(request.forms.get('turns'))
+    turns = float(request.forms.get('turns') or 0)
     redirect('/')
 
-@post('/setpos')
-def setpos():
-    set_position(request.forms.get('position'))
+@post('/sethome')
+def sethome():
+    global home
+    home = abs(current_position()) % 8192
     redirect('/')
 
 @get('/getpos')
