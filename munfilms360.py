@@ -7,6 +7,8 @@ import time
 # DEFINITIONS
 
 ppr = 8192
+turns = 1
+rpms = 10
 
 # MOTOR INITIALIZATION
 
@@ -57,7 +59,7 @@ def tag(tagname, body, **kwargs):
 def a(href, body, **kwargs):
     attr = kwargs
     attr['href'] = href
-    return tag('a', body, attr)
+    return tag('a', body, **attr)
 
 def button(label):
     return '<input value="' + label + '" type="submit" />'
@@ -67,6 +69,24 @@ def p(body, **kwargs):
 
 def h1(body, **kwargs):
     return tag('h1', body, **kwargs)
+
+def h3(body, **kwargs):
+    return tag('h3', body, **kwargs)
+
+def link(body, **kwargs):
+    return tag('link', body, **kwargs)
+
+def div(body, **kwargs):
+    return tag('div', body, **kwargs)
+
+def img(body, **kwargs):
+    return tag('img', body, **kwargs)
+
+def input(body, **kwargs):
+    return tag('input', body, **kwargs)
+
+def span(body, **kwargs):
+    return tag('span', body, **kwargs)
 
 # WIDGETS
 
@@ -89,20 +109,59 @@ def pos_updater_script():
 
 # HTTP ROUTES
 
+@route('/static/<filename>')
+def server_static(filename):
+    return static_file(filename, root='static')
+
 @route('/')
 def index():
     return (
-        h1('MunFilms 360') +
-        p(form('home', button('Torna a casa'))) +
-        p(form('setpos',
-            'Fixa posició a <input name="position"></input>' +
-            button('OK'))) +
-        p('', klass = 'position') + pos_updater_script()
+        link('',
+            href = 'static/style.css',
+            type = 'text/css',
+            rel = 'stylesheet') +
+        div(
+            h1('MunFilms 360') +
+            div(
+                a('home', img('', src = 'static/home.png')) +
+                a('turn', img('', src = 'static/turn.png')),
+                klass = 'controls'
+            ) +
+            h3('Configuració') +
+            div(
+                form(
+                    'setspeed',
+                    span('Velocitat (RPM):', klass = 'label') +
+                        input('', name = 'speed') + 
+                        span('(' + str(rpms) + ')', klass = 'value') +
+                        button('OK')) +
+                form(
+                    'setturns',
+                    span('Voltes:', klass = 'label') +
+                        input('', name = 'turns') +
+                        span('(' + str(turns) + ')', klass = 'value') +
+                        button('OK')) +
+                p('', klass = 'position') + pos_updater_script(),
+                klass = 'config') +
+            img('', src = 'static/gif-web-alpha2.gif', klass = 'logo'),
+            klass = 'wrapper'
         )
+    )
 
-@post('/home')
+@route('/home')
 def gohome():
     set_position(closest_home())
+    redirect('/')
+
+@route('/turn')
+def turn():
+    set_position(current_position() + (ppr * turns))
+    redirect('/')
+
+@post('/setturns')
+def setturns():
+    global turns
+    turns = float(request.forms.get('turns'))
     redirect('/')
 
 @post('/setpos')
@@ -114,4 +173,4 @@ def setpos():
 def getpos():
     return str(current_position())
 
-run(host='localhost', port=8080, debug=True)
+run(host='0.0.0.0', port=8080, debug=True)

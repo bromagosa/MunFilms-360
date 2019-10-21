@@ -1,0 +1,90 @@
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #ffcd1b;
+    margin: 0 0 0 5px;
+    padding: 0;
+    color: #1a1a1a;
+}
+
+div.wrapper {
+    width: 400px;
+    background: #fafad7;
+    padding: 5px 5px 15px 5px;
+    margin: 5px auto;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+
+img.logo {
+    width: 25%;
+    margin: 0 auto;
+    display: block;
+}
+
+h1 {
+    text-align: center;
+    border-radius: 5px 5px 0 0;
+    background: #ffcd1b;
+    padding: 5px;
+    margin: 0;
+}
+
+h3 {
+    text-align: center;
+    border-radius: 5px 5px 0 0;
+    background: #ffcd1b;
+    padding: 5px;
+    margin: 20px 0 10px 0;
+}
+
+div.controls {
+    text-align:center;
+    margin-top: 15px;
+}
+
+div.controls a {
+    display: inline-block;
+    width: 10%;
+    margin: 5px;
+}
+
+div.controls a:hover {
+    opacity: 0.8;
+}
+
+div.controls a img {
+    width: 100%;
+}
+
+div.config {
+    padding: 5px;
+    width: 300px;
+    margin: 0 auto;
+}
+
+span.label {
+    width: 130px;
+    display: inline-block;
+}
+
+div.config input {
+    width: 50px;
+    margin-right: 5px;
+}
+
+span.value {
+    width: 50px;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+@media only screen and (max-width: 1000px) {
+    body {
+        margin: 0;
+    }
+
+    div.wrapper {
+        width: 100%;
+        margin: 0;
+    }
+}
