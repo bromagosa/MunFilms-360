@@ -4,6 +4,7 @@ from bottle import *
 from functools import reduce
 import time
 import threading
+import os
 
 # DEFINITIONS
 
@@ -11,6 +12,8 @@ ppr = 8192
 turns = 1
 rpm = 30
 home = 0
+
+cwd = os.path.dirname(os.path.realpath(__file__))
 
 # MOTOR INITIALIZATION
 
@@ -153,7 +156,7 @@ def pos_updater_script():
 
 @route('/static/<filename>')
 def server_static(filename):
-    return static_file(filename, root='static')
+    return static_file(filename, root = cwd + '/static')
 
 @route('/')
 def index():
