@@ -3,6 +3,7 @@ from odrive.enums import *
 from bottle import *
 from functools import reduce
 import time
+import threading
 
 # DEFINITIONS
 
@@ -14,23 +15,49 @@ home = 0
 # MOTOR INITIALIZATION
 
 print('Looking for an ODrive...')
-odrv0 = odrive.find_any()
+odrv0 = False
+odrv_ready = False
 
-print('Calibrating ODrive...')
-odrv0.axis0.requested_state = AXIS_STATE_FULL_CALIBRATION_SEQUENCE
-while odrv0.axis0.current_state != AXIS_STATE_IDLE:
-    time.sleep(0.1)
+def init_odrive():
+    global odrv0
+    global odrv_ready
+    odrv0 = odrive.find_any()
+    print('Calibrating ODrive...')
+    odrv0.axis0.requested_state = AXIS_STATE_FULL_CALIBRATION_SEQUENCE
+    while odrv0.axis0.current_state != AXIS_STATE_IDLE:
+        time.sleep(0.1)
+    print('ODrive calibrated. Setting state to Close Loop Control');
+    odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+    odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
+    '''
+    # INITIAL CONFIGURATION, IN CASE IT IS LOST SOMEDAY
+    odrv0.axis0.motor.config.current_lim = 60
+    odrv0.axis0.controller.config.vel_limit_tolerance = 5
+    odrv0.axis0.encoder.config.cpr = 8192
+    odrv0.axis0.motor.config.pole_pairs = 7
+    odrv0.axis0.controller.config.vel_gain = 0.00086
+    odrv0.axis0.controller.config.pos_gain = 146.8
+    odrv0.axis0.controller.config.vel_integrator_gain = 0.5 * 20 * odrv0.axis0.controller.config.vel_gain
+    '''
+    print('ODrive ready for a spin :)')
+    go_home()
+    odrv_ready = True
 
-print('ODrive calibrated. Setting state to Close Loop Control');
-odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-
-odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
+init_thread = threading.Thread(target=init_odrive)
+init_thread.start()
 
 # MOTOR CONTROL
 
+def calibrate_anticogging():
+    print('Calibrating anti-cogging')
+    odrv0.axis0.controller.config.vel_gain = 0.0005
+    odrv0.axis0.controller.config.pos_gain = 300
+    odrv0.axis0.controller.config.vel_integrator_gain = 0.0150
+    odrv0.axis0.controller.start_anticogging_calibration()
+
 def set_position(position):
     odrv0.axis0.controller.config.control_mode = CTRL_MODE_POSITION_CONTROL
-    odrv0.axis0.controller.pos_setpoint = position    
+    odrv0.axis0.controller.pos_setpoint = position
 
 def set_rpm(rpm):
     odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
@@ -45,13 +72,10 @@ def go_home():
     closest = closest_home()
     set_rpm(25)
     set_position(closest)
-    while (abs(current_position() - closest) > 10):
+    while (abs(current_position() - closest) > 50):
         time.sleep(0.1)
+    print('got home')
     set_rpm(rpm)
-    print('---')
-    print(str(current_position()))
-    print(str(home))
-    print('---')
 
 # HTML GENERATION
 
@@ -151,7 +175,7 @@ def index():
                 form(
                     'setspeed',
                     span('Velocitat (RPM):', klass = 'label') +
-                        input('', name = 'speed', klass = 'input') + 
+                        input('', name = 'speed', klass = 'input') +
                         span('(' + str(rpm) + ')', klass = 'value') +
                         button('OK')) +
                 form(
@@ -160,7 +184,8 @@ def index():
                         input('', name = 'turns', klass = 'input') +
                         span('(' + str(turns) + ')', klass = 'value') +
                         button('OK')) +
-                form('sethome', button('Fixar posició inicial')),
+                form('sethome', button('Fixar posició inicial')) +
+                form('anticog', button('Calibratge automàtic')),
                 klass = 'config') +
             img('', src = 'static/gif-web-alpha2.gif', klass = 'logo'),
             klass = 'wrapper'
@@ -169,26 +194,30 @@ def index():
 
 @route('/home')
 def gohome():
-    go_home()
+    if (odrv_ready):
+        go_home()
     redirect('/')
 
 @route('/turn')
 def turn():
-    set_position(current_position() + (ppr * turns))
+    if (odrv_ready):
+        set_position(current_position() + (ppr * turns))
     redirect('/')
 
 @route('/stop')
 def stop():
-    odrv0.axis0.requested_state = AXIS_STATE_IDLE
-    time.sleep(0.25)
-    odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+    if (odrv_ready):
+        odrv0.axis0.requested_state = AXIS_STATE_IDLE
+        time.sleep(0.25)
+        odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
     redirect('/')
 
 @post('/setspeed')
 def setspeed():
-    global rpm
-    rpm = min(float(request.forms.get('speed') or 0), 100)
-    set_rpm(rpm)
+    if (odrv_ready):
+        global rpm
+        rpm = min(float(request.forms.get('speed') or 0), 100)
+        set_rpm(rpm)
     redirect('/')
 
 @post('/setturns')
@@ -199,12 +228,22 @@ def setturns():
 
 @post('/sethome')
 def sethome():
-    global home
-    home = abs(current_position()) % 8192
+    if (odrv_ready):
+        global home
+        home = abs(current_position()) % ppr
+    redirect('/')
+
+@post('/anticog')
+def anticog():
+    if (odrv_ready):
+        calibrate_anticogging()
     redirect('/')
 
 @get('/getpos')
 def getpos():
-    return str(current_position())
+    if (odrv_ready):
+        return str(current_position())
+    else:
+        return 0
 
 run(host='0.0.0.0', port=8080, debug=True)
