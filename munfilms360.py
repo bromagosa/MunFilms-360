@@ -17,34 +17,36 @@ cwd = os.path.dirname(os.path.realpath(__file__))
 
 # MOTOR INITIALIZATION
 
-print('Looking for an ODrive...')
 odrv0 = False
 odrv_ready = False
 
 def init_odrive():
     global odrv0
     global odrv_ready
+    odrv0 = False
+    print('Looking for an ODrive...')
     odrv0 = odrive.find_any()
     print('Calibrating ODrive...')
     odrv0.axis0.requested_state = AXIS_STATE_FULL_CALIBRATION_SEQUENCE
     while odrv0.axis0.current_state != AXIS_STATE_IDLE:
         time.sleep(0.1)
-    print('ODrive calibrated. Setting state to Close Loop Control');
-    odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-    odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
-    '''
-    # INITIAL CONFIGURATION, IN CASE IT IS LOST SOMEDAY
+
+    # INITIAL CONFIGURATION
     odrv0.axis0.motor.config.current_lim = 60
     odrv0.axis0.controller.config.vel_limit_tolerance = 5
     odrv0.axis0.encoder.config.cpr = 8192
     odrv0.axis0.motor.config.pole_pairs = 7
-    odrv0.axis0.controller.config.vel_gain = 0.00086
-    odrv0.axis0.controller.config.pos_gain = 146.8
+    odrv0.axis0.controller.config.vel_gain = 0.00071
+    odrv0.axis0.controller.config.pos_gain = 180
     odrv0.axis0.controller.config.vel_integrator_gain = 0.5 * 20 * odrv0.axis0.controller.config.vel_gain
-    '''
+    odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
+
+    print('ODrive calibrated. Setting state to Close Loop Control');
+    odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+
+    odrv_ready = True
     print('ODrive ready for a spin :)')
     go_home()
-    odrv_ready = True
 
 init_thread = threading.Thread(target=init_odrive)
 init_thread.start()
@@ -52,11 +54,18 @@ init_thread.start()
 # MOTOR CONTROL
 
 def calibrate_anticogging():
+    odrv_ready = False
     print('Calibrating anti-cogging')
-    odrv0.axis0.controller.config.vel_gain = 0.0005
-    odrv0.axis0.controller.config.pos_gain = 300
-    odrv0.axis0.controller.config.vel_integrator_gain = 0.0150
+
+    odrv0.axis0.controller.config.pos_gain = 600
+
     odrv0.axis0.controller.start_anticogging_calibration()
+    while odrv0.axis0.controller.pos_setpoint > 0:
+        time.sleep(0.1)
+
+    odrv0.axis0.controller.config.pos_gain = 180
+
+    odrv_ready = True
 
 def set_position(position):
     odrv0.axis0.controller.config.control_mode = CTRL_MODE_POSITION_CONTROL
@@ -167,33 +176,42 @@ def index():
             rel = 'stylesheet') +
         div(
             h1('MunFilms 360') +
-            div(
-                a('home', img('', src = 'static/home.png')) +
-                a('turn', img('', src = 'static/turn.png')) +
-                a('stop', img('', src = 'static/stop.png')),
-                klass = 'controls'
-            ) +
-            h3('Configuració') +
-            div(
-                form(
-                    'setspeed',
-                    span('Velocitat (RPM):', klass = 'label') +
-                        input('', name = 'speed', klass = 'input') +
-                        span('(' + str(rpm) + ')', klass = 'value') +
-                        button('OK')) +
-                form(
-                    'setturns',
-                    span('Voltes:', klass = 'label') +
-                        input('', name = 'turns', klass = 'input') +
-                        span('(' + str(turns) + ')', klass = 'value') +
-                        button('OK')) +
-                form('sethome', button('Fixar posició inicial')) +
-                form('anticog', button('Calibratge automàtic')),
-                klass = 'config') +
+            (homepage() if odrv_ready else startup()) +
             img('', src = 'static/gif-web-alpha2.gif', klass = 'logo'),
             klass = 'wrapper'
         )
     )
+
+def homepage():
+    return (
+        div(
+            a('home', img('', src = 'static/home.png')) +
+            a('turn', img('', src = 'static/turn.png')) +
+            a('stop', img('', src = 'static/stop.png')),
+            klass = 'controls') +
+        h3('Configuració') +
+        div(
+            form(
+                'setspeed',
+                span('Velocitat (RPM):', klass = 'label') +
+                input('', name = 'speed', klass = 'input') +
+                span('(' + str(rpm) + ')', klass = 'value') +
+                button('OK')) +
+            form(
+                'setturns',
+                span('Voltes:', klass = 'label') +
+                input('', name = 'turns', klass = 'input') +
+                span('(' + str(turns) + ')', klass = 'value') +
+                button('OK')) +
+            form('sethome', button('Fixar posició inicial')) +
+            form('resetmotor', button('Resetejar motor')) +
+            form('anticog', button('Calibratge automàtic')),
+            klass = 'config'
+        )
+    )
+
+def startup():
+    return h3('Inicialitzant...')
 
 @route('/home')
 def gohome():
@@ -234,6 +252,15 @@ def sethome():
     if (odrv_ready):
         global home
         home = abs(current_position()) % ppr
+    redirect('/')
+
+@post('/resetmotor')
+def resetmotor():
+    if (odrv0):
+        try:
+            odrv0.reboot()
+        finally:
+            init_odrive()
     redirect('/')
 
 @post('/anticog')
