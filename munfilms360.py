@@ -1,93 +1,58 @@
-import odrive
-from odrive.enums import *
 from bottle import *
 from functools import reduce
-import time
-import threading
 import os
+import serial
+
+
+# MOTOR INTERFACE
+
+class Motor:
+    rpm = 8.5
+    turns = 1
+    serialPort = serial.Serial('/dev/ttyACM0')
+
+    def __init__(self):
+        self.serialPort.baudrate = 56000
+        self.reconnect()
+
+    def reconnect(self):
+        if (self.serialPort.is_open):
+            self.serialPort.close()
+        self.serialPort.open()
+
+    def send_command(self, command, param):
+        self.serialPort.write(
+            (command + (str(param) if param else '')).encode('utf-8'))
+
+    def set_turns(self, turns):
+        self.turns = turns
+
+    def get_turns(self):
+        return self.turns
+
+    def set_rpm(self, rpm):
+        self.rpm = rpm
+        self.send_command('rpm', rpm)
+
+    def get_rpm(self):
+        return self.rpm
+
+    def set_home(self):
+        self.send_command('fix', False)
+
+    def go_home(self):
+        self.send_command('hom', False)
+
+    def turn(self):
+        self.send_command('rev', self.turns)
+
+    def turn_degrees(self, degrees):
+        self.send_command('deg', degrees)
 
 # DEFINITIONS
 
-ppr = 8192
-turns = 1
-rpm = 30
-home = 0
-
 cwd = os.path.dirname(os.path.realpath(__file__))
-
-# MOTOR INITIALIZATION
-
-odrv0 = False
-odrv_ready = False
-
-def init_odrive():
-    global odrv0
-    global odrv_ready
-    odrv0 = False
-    print('Looking for an ODrive...')
-    odrv0 = odrive.find_any()
-    print('Calibrating ODrive...')
-    odrv0.axis0.requested_state = AXIS_STATE_FULL_CALIBRATION_SEQUENCE
-    while odrv0.axis0.current_state != AXIS_STATE_IDLE:
-        time.sleep(0.1)
-
-    # INITIAL CONFIGURATION
-    odrv0.axis0.motor.config.current_lim = 60
-    odrv0.axis0.controller.config.vel_limit_tolerance = 5
-    odrv0.axis0.encoder.config.cpr = 8192
-    odrv0.axis0.motor.config.pole_pairs = 7
-    odrv0.axis0.controller.config.vel_gain = 0.00071
-    odrv0.axis0.controller.config.pos_gain = 180
-    odrv0.axis0.controller.config.vel_integrator_gain = 0.5 * 20 * odrv0.axis0.controller.config.vel_gain
-    odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
-
-    print('ODrive calibrated. Setting state to Close Loop Control');
-    odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-
-    odrv_ready = True
-    print('ODrive ready for a spin :)')
-    go_home()
-
-init_thread = threading.Thread(target=init_odrive)
-init_thread.start()
-
-# MOTOR CONTROL
-
-def calibrate_anticogging():
-    odrv_ready = False
-    print('Calibrating anti-cogging')
-
-    odrv0.axis0.controller.config.pos_gain = 600
-
-    odrv0.axis0.controller.start_anticogging_calibration()
-    while odrv0.axis0.controller.pos_setpoint > 0:
-        time.sleep(0.1)
-
-    odrv0.axis0.controller.config.pos_gain = 180
-
-    odrv_ready = True
-
-def set_position(position):
-    odrv0.axis0.controller.config.control_mode = CTRL_MODE_POSITION_CONTROL
-    odrv0.axis0.controller.pos_setpoint = position
-
-def set_rpm(rpm):
-    odrv0.axis0.controller.config.vel_limit = rpm * (ppr / 60)
-
-def current_position():
-    return odrv0.axis0.encoder.pos_estimate
-
-def closest_home():
-    return ((current_position() // ppr) * ppr) + home
-
-def go_home():
-    closest = closest_home()
-    set_rpm(25)
-    set_position(closest)
-    while (abs(current_position() - closest) > 50):
-        time.sleep(0.1)
-    print('got home')
-    set_rpm(rpm)
+motor = Motor()
 
 # HTML GENERATION
 
@@ -175,8 +140,8 @@ def index():
             type = 'text/css',
             rel = 'stylesheet') +
         div(
-            h1('MunFilms 360') +
-            (homepage() if odrv_ready else startup()) +
+            h1('Loopers 360') +
+            homepage() +
             img('', src = 'static/gif-web-alpha2.gif', klass = 'logo'),
             klass = 'wrapper'
         )
@@ -195,85 +160,48 @@ def homepage():
                 'setspeed',
                 span('Velocitat (RPM):', klass = 'label') +
                 input('', name = 'speed', klass = 'input') +
-                span('(' + str(rpm) + ')', klass = 'value') +
+                span('(' + str(motor.get_rpm()) + ')', klass = 'value') +
                 button('OK')) +
             form(
                 'setturns',
                 span('Voltes:', klass = 'label') +
                 input('', name = 'turns', klass = 'input') +
-                span('(' + str(turns) + ')', klass = 'value') +
+                span('(' + str(motor.get_turns()) + ')', klass = 'value') +
                 button('OK')) +
-            form('sethome', button('Fixar posició inicial')) +
-            form('resetmotor', button('Resetejar motor')) +
-            form('anticog', button('Calibratge automàtic')),
+            form('sethome', button('Fixar posició inicial')),
             klass = 'config'
         )
     )
 
-def startup():
-    return h3('Inicialitzant...')
-
 @route('/home')
 def gohome():
-    if (odrv_ready):
-        go_home()
+    motor.go_home()
     redirect('/')
 
 @route('/turn')
 def turn():
-    if (odrv_ready):
-        set_position(current_position() + (ppr * turns))
+    motor.turn()
     redirect('/')
 
 @route('/stop')
 def stop():
-    if (odrv_ready):
-        odrv0.axis0.requested_state = AXIS_STATE_IDLE
-        time.sleep(0.25)
-        odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
+    motor.reconnect()
     redirect('/')
 
 @post('/setspeed')
 def setspeed():
-    if (odrv_ready):
-        global rpm
-        rpm = min(float(request.forms.get('speed') or 0), 100)
-        set_rpm(rpm)
+    motor.set_rpm(min(float(request.forms.get('speed') or 1), 100))
     redirect('/')
 
 @post('/setturns')
 def setturns():
-    global turns
-    turns = float(request.forms.get('turns') or 0)
+    motor.set_turns(float(request.forms.get('turns') or 1))
     redirect('/')
 
 @post('/sethome')
 def sethome():
-    if (odrv_ready):
-        global home
-        home = abs(current_position()) % ppr
+    motor.set_home()
     redirect('/')
-
-@post('/resetmotor')
-def resetmotor():
-    if (odrv0):
-        try:
-            odrv0.reboot()
-        finally:
-            init_odrive()
-    redirect('/')
-
-@post('/anticog')
-def anticog():
-    if (odrv_ready):
-        calibrate_anticogging()
-    redirect('/')
-
-@get('/getpos')
-def getpos():
-    if (odrv_ready):
-        return str(current_position())
-    else:
-        return 0
 
 run(host='0.0.0.0', port=80, debug=True)
+
