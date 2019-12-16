@@ -96,5 +96,33 @@ span.value {
     div.wrapper {
         width: 100%;
         margin: 0;
+        font-size: 2em;
     }
+
+    div.controls a, div.controls form {
+        margin: 5px 40px;
+    }
+
+    div.config {
+        width: 600px;
+    }
+
+    div.config input.input {
+        width: 100px;
+        margin-right: 10px;
+    }
+
+    div.config input {
+        font-size: 1em;
+    }
+
+    span.label {
+        width: 260px;
+    }
+
+    span.value {
+        width: 100px;
+        margin-right: 10px;
+    }
+
 }
