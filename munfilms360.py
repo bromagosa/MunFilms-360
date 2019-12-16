@@ -69,7 +69,7 @@ def attributes(**kwargs):
         return ''
 
 def form(action, body):
-    return '<form action=/' + action + ' method="POST">' + body + '</form>'
+    return '<form action="/' + action + '" method="POST">' + body + '</form>'
 
 def tag(tagname, body, **kwargs):
     return ('<' + tagname + attributes(**kwargs) + '>'
@@ -83,8 +83,8 @@ def a(href, body, **kwargs):
 def button(label):
     return '<input value="' + label + '" type="submit" />'
 
-def p(body, **kwargs):
-    return tag('p', body, **kwargs)
+def i(body, **kwargs):
+    return tag('i', body, **kwargs)
 
 def h1(body, **kwargs):
     return tag('h1', body, **kwargs)
@@ -132,11 +132,19 @@ def pos_updater_script():
 def server_static(filename):
     return static_file(filename, root = cwd + '/static')
 
+@route('/webfonts/<filename>')
+def server_static(filename):
+    return static_file(filename, root = cwd + '/static/webfonts')
+
 @route('/')
 def index():
     return (
         link('',
             href = 'static/style.css',
+            type = 'text/css',
+            rel = 'stylesheet') +
+        link('',
+            href = 'static/all.min.css',
             type = 'text/css',
             rel = 'stylesheet') +
         div(
@@ -150,9 +158,18 @@ def index():
 def homepage():
     return (
         div(
-            a('home', img('', src = 'static/home.png')) +
-            a('turn', img('', src = 'static/turn.png')) +
-            a('stop', img('', src = 'static/stop.png')),
+            span(
+                a('bigstepleft', i('', klass = 'fas fa-angle-double-left')) +
+                a('stepleft', i('', klass = 'fas fa-angle-left')) +
+                form('sethome',
+                    i('', klass = 'fas fa-flag', onclick = 'this.parentNode.submit()')) +
+                a('stepright', i('', klass = 'fas fa-angle-right')) +
+                a('bigstepright', i('', klass = 'fas fa-angle-double-right'))) +
+            span(
+                a('home', i('', klass = 'fas fa-home')) +
+                a('turnleft', i('', klass = 'fas fa-undo')) +
+                a('turnright', i('', klass = 'fas fa-undo fa-flip-horizontal')) +
+                a('stop', i('', klass = 'fas fa-hand-paper'))),
             klass = 'controls') +
         h3('Configuració') +
         div(
@@ -167,8 +184,7 @@ def homepage():
                 span('Voltes:', klass = 'label') +
                 input('', name = 'turns', klass = 'input') +
                 span('(' + str(motor.get_turns()) + ')', klass = 'value') +
-                button('OK')) +
-            form('sethome', button('Fixar posició inicial')),
+                button('OK')),
             klass = 'config'
         )
     )
@@ -178,9 +194,48 @@ def gohome():
     motor.go_home()
     redirect('/')
 
-@route('/turn')
+@route('/turnleft')
 def turn():
     motor.turn()
+    redirect('/')
+
+@route('/turnright')
+def turn():
+    motor.set_turns(motor.get_turns() * -1)
+    motor.turn()
+    motor.set_turns(motor.get_turns() * -1)
+    redirect('/')
+
+@route('/bigstepleft')
+def stepleft():
+    turns = motor.get_turns()
+    motor.set_turns(-0.05)
+    motor.turn()
+    motor.set_turns(turns)
+    redirect('/')
+
+@route('/bigstepright')
+def stepleft():
+    turns = motor.get_turns()
+    motor.set_turns(0.05)
+    motor.turn()
+    motor.set_turns(turns)
+    redirect('/')
+
+@route('/stepleft')
+def stepleft():
+    turns = motor.get_turns()
+    motor.set_turns(-0.01)
+    motor.turn()
+    motor.set_turns(turns)
+    redirect('/')
+
+@route('/stepright')
+def stepleft():
+    turns = motor.get_turns()
+    motor.set_turns(0.01)
+    motor.turn()
+    motor.set_turns(turns)
     redirect('/')
 
 @route('/stop')
