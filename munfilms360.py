@@ -9,13 +9,9 @@ import serial
 class Motor:
     rpm = 8.5
     turns = 1
-    port = '/dev/ttyACM0'
+    serialPort = serial.Serial('/dev/ttyACM0')
 
-    def startup(self):
-        while not os.path.exists(self.port):
-            print('Waiting for motor')
-            time.sleep(1)
-        self.serialPort = serial.Serial('/dev/ttyACM0')
+    def __init__(self):
         self.serialPort.baudrate = 56000
         self.reconnect()
 
@@ -160,7 +156,6 @@ def index():
     )
 
 def homepage():
-    motor.startup()
     return (
         div(
             span(
