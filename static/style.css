@@ -45,6 +45,7 @@ div.controls {
 div.controls a, div.controls form {
     display: inline-block;
     margin: 5px 20px;
+    cursor: pointer;
 }
 
 div.controls a:hover, div.controls form:hover {
